@@ -70,7 +70,7 @@ func VideoTransCoding(transcodingInfo *dto.TranscodingInfo) {
 			fileName := c.Resolution + "_" + c.BitrateRate + "_" + c.FPS
 			tsFileName := transcodingInfo.OutputDir + fileName + ".ts"
 			// 压缩视频
-			err := pressingVideo(transcodingInfo.InputFile, tsFileName, c.Resolution, c.BitrateRate)
+			err := pressingVideo(transcodingInfo.InputFile, tsFileName, c.Resolution)
 			if err != nil {
 				wg.Done()
 				return
@@ -163,24 +163,20 @@ func getHeigthRes(height int) int {
 
 // 获取转码目标
 func getTranscodingTarget(videoInfo *dto.TranscodingInfo) []TranscodingTarget {
-	targets := make([]TranscodingTarget, 0)
-	maxRresolution := utils.Max(getWidthRes(videoInfo.Width), getHeigthRes(videoInfo.Height))
+    targets := make([]TranscodingTarget, 0)
+    maxRresolution := utils.Max(getWidthRes(videoInfo.Width), getHeigthRes(videoInfo.Height))
 
-	switch maxRresolution {
-	case 1080:
-		targets = append(targets, TranscodingTarget{Resolution: "1920x1080", BitrateRate: "3000k", FPS: "30"})
-		fallthrough
-	case 720:
-		targets = append(targets, TranscodingTarget{Resolution: "1280x720", BitrateRate: "2000k", FPS: "30"})
-		fallthrough
-	case 480:
-		targets = append(targets, TranscodingTarget{Resolution: "854x480", BitrateRate: "900k", FPS: "30"})
-		fallthrough
-	case 360:
-		targets = append(targets, TranscodingTarget{Resolution: "640x360", BitrateRate: "500k", FPS: "30"})
-	}
+    if maxRresolution >= 1080 {
+        targets = append(targets, TranscodingTarget{Resolution: "1920x1080", FPS: "30"})
+    } else if maxRresolution >= 720 {
+        targets = append(targets, TranscodingTarget{Resolution: "1080x720", FPS: "30"})
+    } else if maxRresolution >= 480 {
+        targets = append(targets, TranscodingTarget{Resolution: "854x480", FPS: "30"})
+    } else if maxRresolution >= 360 {
+        targets = append(targets, TranscodingTarget{Resolution: "640x360", FPS: "30"})
+    }
 
-	return targets
+    return targets
 }
 
 // 获取视频信息
@@ -201,98 +197,11 @@ func getVideoInfo(input string) (info global.VideoInfo, err error) {
 }
 
 // 压缩视频
-func pressingVideo(inputFile, outputFile, quality, rate string) error {
-	command := []string{"-i", inputFile, "-crf", "20", "-s", quality,
-		"-b:v", rate, "-c:v", "libx264", "-r", "30000/1001",
-		"-c:a", "aac", "-f", "mpegts", outputFile,
+
+func pressingVideo(inputFile, outputFile, quality string) error {
+command := []string{"-i", inputFile, "-crf", "23", "-s", quality,"-c:v", "libx264", "-r", "30", "-preset", "fast","-c:a", "aac", "-f", "mpegts", outputFile,
 	}
 
 	_, err := utils.RunCmd(exec.Command("ffmpeg", command...))
 	if err != nil {
-		utils.ErrorLog("压缩视频失败", "transcoding", err.Error())
-		return err
-	}
-
-	return nil
-}
-
-func generateVideoSlices(inputFile, outputDir, outputName string) (string, error) {
-	outputM3U8 := outputDir + outputName + ".m3u8"
-	outputTs := outputDir + outputName + "_%05d.ts"
-
-	command := []string{"-i", inputFile, "-c", "copy",
-		"-map", "0", "-f", "segment", "-segment_list",
-		outputM3U8, "-segment_time", "10", outputTs,
-	}
-
-	_, err := utils.RunCmd(exec.Command("ffmpeg", command...))
-	if err != nil {
-		utils.ErrorLog("生成视频切片失败", "transcoding", err.Error())
-		return outputM3U8, err
-	}
-
-	return outputM3U8, nil
-}
-
-// 保存m3u8文件
-func saveM3u8File(transcodingInfo *dto.TranscodingInfo, fileName, m3u8File string) error {
-	file, err := os.Open(m3u8File)
-	if err != nil {
-		utils.ErrorLog("打开m3u8文件失败", "transcoding", err.Error())
-		return err
-	}
-
-	bytes, err := io.ReadAll(file)
-	if err != nil {
-		utils.ErrorLog("读取m3u8文件失败", "transcoding", err.Error())
-		return err
-	}
-
-	file.Close()
-
-	global.Mysql.Create(&model.VideoIndexFile{
-		ResourceID: transcodingInfo.ResourceID,
-		Quality:    fileName,
-		DirName:    transcodingInfo.DirName,
-		Content:    string(bytes),
-	})
-
-	return nil
-}
-
-// 完成转码
-func completeTransCoding(videoId, resourceId uint, status int) error {
-	// 查询是否存在转码成功的视频文件
-	var videoFileCount int64
-	global.Mysql.Model(&model.VideoIndexFile{}).Where("resource_id = ?", resourceId).Count(&videoFileCount)
-	if videoFileCount == 0 {
-		status = global.PROCESSING_FAIL
-	}
-
-	// 更新资源状态
-	if err := global.Mysql.Model(&model.Resource{}).Where("id = ?", resourceId).Updates(
-		map[string]interface{}{
-			"status": status,
-		},
-	).Error; err != nil {
-		utils.ErrorLog("更新资源状态失败", "transcoding", err.Error())
-		return err
-	}
-
-	// 获取转码中资源的数量
-	var count int64
-	global.Mysql.Model(&model.Resource{}).Where("vid = ? and status = ?", videoId, global.VIDEO_PROCESSING).Count(&count)
-	// 如果没有转码中的视频，则更新视频为待审核
-	if count == 0 {
-		if err := global.Mysql.Model(&model.Video{}).Where("id = ? and status = ?", videoId, global.SUBMIT_REVIEW).Updates(
-			map[string]interface{}{
-				"status": global.WAITING_REVIEW,
-			},
-		).Error; err != nil {
-			utils.ErrorLog("更新资源状态失败", "transcoding", err.Error())
-			return err
-		}
-	}
-
-	return nil
-}
+		utils.ErrorLog(
