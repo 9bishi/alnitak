@@ -204,4 +204,90 @@ command := []string{"-i", inputFile, "-crf", "23", "-s", quality,"-c:v", "libx26
 
 	_, err := utils.RunCmd(exec.Command("ffmpeg", command...))
 	if err != nil {
-		utils.ErrorLog(
+		utils.ErrorLog("压缩视频失败", "transcoding", err.Error())
+		return err
+	}
+
+	return nil
+}
+
+func generateVideoSlices(inputFile, outputDir, outputName string) (string, error) {
+	outputM3U8 := outputDir + outputName + ".m3u8"
+	outputTs := outputDir + outputName + "_%05d.ts"
+
+	command := []string{"-i", inputFile, "-c", "copy",
+		"-map", "0", "-f", "segment", "-segment_list",
+		outputM3U8, "-segment_time", "10", outputTs,
+	}
+
+	_, err := utils.RunCmd(exec.Command("ffmpeg", command...))
+	if err != nil {
+		utils.ErrorLog("生成视频切片失败", "transcoding", err.Error())
+		return outputM3U8, err
+	}
+
+	return outputM3U8, nil
+}
+
+// 保存m3u8文件
+func saveM3u8File(transcodingInfo *dto.TranscodingInfo, fileName, m3u8File string) error {
+	file, err := os.Open(m3u8File)
+	if err != nil {
+		utils.ErrorLog("打开m3u8文件失败", "transcoding", err.Error())
+		return err
+	}
+
+	bytes, err := io.ReadAll(file)
+	if err != nil {
+		utils.ErrorLog("读取m3u8文件失败", "transcoding", err.Error())
+		return err
+	}
+
+	file.Close()
+
+	global.Mysql.Create(&model.VideoIndexFile{
+		ResourceID: transcodingInfo.ResourceID,
+		Quality:    fileName,
+		DirName:    transcodingInfo.DirName,
+		Content:    string(bytes),
+	})
+
+	return nil
+}
+
+// 完成转码
+func completeTransCoding(videoId, resourceId uint, status int) error {
+	// 查询是否存在转码成功的视频文件
+	var videoFileCount int64
+	global.Mysql.Model(&model.VideoIndexFile{}).Where("resource_id = ?", resourceId).Count(&videoFileCount)
+	if videoFileCount == 0 {
+		status = global.PROCESSING_FAIL
+	}
+
+	// 更新资源状态
+	if err := global.Mysql.Model(&model.Resource{}).Where("id = ?", resourceId).Updates(
+		map[string]interface{}{
+			"status": status,
+		},
+	).Error; err != nil {
+		utils.ErrorLog("更新资源状态失败", "transcoding", err.Error())
+		return err
+	}
+
+	// 获取转码中资源的数量
+	var count int64
+	global.Mysql.Model(&model.Resource{}).Where("vid = ? and status = ?", videoId, global.VIDEO_PROCESSING).Count(&count)
+	// 如果没有转码中的视频，则更新视频为待审核
+	if count == 0 {
+		if err := global.Mysql.Model(&model.Video{}).Where("id = ? and status = ?", videoId, global.SUBMIT_REVIEW).Updates(
+			map[string]interface{}{
+				"status": global.WAITING_REVIEW,
+			},
+		).Error; err != nil {
+			utils.ErrorLog("更新资源状态失败", "transcoding", err.Error())
+			return err
+		}
+	}
+
+	return nil
+}
