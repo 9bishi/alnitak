@@ -30,24 +30,31 @@ const activePercentage = ref(props.value);
 const blockRef = ref<HTMLElement | null>(null);
 const sliderRef = ref<HTMLElement | null>(null);
 
+// 步进处理：根据step计算步进
+const calculateStep = (percentage: number) => {
+  if (props.step) {
+    const stepValue = (props.max - props.min) / 10;  // 假设步进值为 1/10
+    return Math.round(percentage * 100) / 100 * stepValue;
+  }
+  return percentage;
+}
+
 // 点击滑动条
 const clickSlider = (e: MouseEvent) => {
   let activeSize: number;
   let percentage: number;
   if (props.vertical) {
     activeSize = sliderRef.value!.clientHeight - (e.clientY - sliderRef.value!.getBoundingClientRect().top);
-    percentage = Math.round((activeSize / sliderRef.value!.clientHeight) * 100) / 100;
+    percentage = (activeSize / sliderRef.value!.clientHeight);
   } else {
     activeSize = e.clientX - sliderRef.value!.getBoundingClientRect().left;
-    percentage = Math.round((activeSize / sliderRef.value!.clientWidth) * 100) / 100;
+    percentage = (activeSize / sliderRef.value!.clientWidth);
   }
 
-  if (props.step) {
-    percentage = Math.round(percentage * 10) / 10
-  }
+  percentage = Math.max(0, Math.min(percentage, 1));
 
   activePercentage.value = percentage * 100;
-  emit('changeValue', Math.round((props.max - props.min) * percentage * 100) / 100);
+  emit('changeValue', Math.round((props.max - props.min) * calculateStep(percentage) + props.min));
 }
 
 // 滑动滑动条
@@ -61,7 +68,8 @@ const slidingSlider = () => {
       document.onmousemove = document.onmouseup = null;
     };
   };
-  //移动端
+
+  // 移动端
   blockRef.value!.ontouchstart = function () {
     document.ontouchmove = function (e) {
       sliderValueChange(e);
@@ -72,7 +80,7 @@ const slidingSlider = () => {
   };
 }
 
-//滑动条值改变
+// 滑动条值改变
 const sliderValueChange = (e: MouseEvent | TouchEvent) => {
   let activeSize: number;
   let percentage: number;
@@ -88,36 +96,31 @@ const sliderValueChange = (e: MouseEvent | TouchEvent) => {
 
   if (props.vertical) {
     activeSize = sliderRef.value!.clientHeight - (clientY - sliderRef.value!.getBoundingClientRect().top);
-    percentage = Math.round((activeSize / sliderRef.value!.clientHeight) * 100) / 100;
+    percentage = (activeSize / sliderRef.value!.clientHeight);
   } else {
     activeSize = (clientX - sliderRef.value!.getBoundingClientRect().left);
-    percentage = Math.round((activeSize / sliderRef.value!.clientWidth) * 100) / 100;
+    percentage = (activeSize / sliderRef.value!.clientWidth);
   }
 
-  percentage = Math.max(0, percentage);
-  percentage = Math.min(percentage, 1);
-
-  if (props.step) {
-    percentage = Math.round(percentage * 10) / 10
-  }
+  percentage = Math.max(0, Math.min(percentage, 1));
 
   activePercentage.value = percentage * 100;
-  emit('changeValue', Math.round((props.max - props.min) * percentage * 100) / 100);
+  emit('changeValue', Math.round((props.max - props.min) * calculateStep(percentage) + props.min));
 }
 
+// 监听value的变化，更新滑动条位置
 watch(() => props.value, (newValue) => {
-  activePercentage.value = Math.round((newValue / (props.max - props.min)) * 10000) / 100;
+  activePercentage.value = Math.round(((newValue - props.min) / (props.max - props.min)) * 100);
 });
 
 onMounted(() => {
   slidingSlider();
-  activePercentage.value = Math.round((props.value / (props.max - props.min)) * 100);
+  activePercentage.value = Math.round(((props.value - props.min) / (props.max - props.min)) * 100);
 });
 
 onBeforeUnmount(() => {
-  //清除touch事件
+  // 清除 touch 和 mouse 事件
   document.ontouchmove = document.ontouchend = null;
-  //清除mouse事件
   document.onmousemove = document.onmouseup = null;
 })
 </script>
@@ -154,7 +157,6 @@ onBeforeUnmount(() => {
     }
   }
 }
-
 
 .slider-vertical {
   height: calc(100% - 24px);
