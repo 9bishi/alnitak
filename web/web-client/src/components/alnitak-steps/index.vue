@@ -1,6 +1,6 @@
 <template>
   <div class="alnitak-steps">
-    <div class="alnitak-step" v-for="(item, index) in props.data">
+    <div class="alnitak-step" v-for="(item, index) in props.data" :key="index">
       <div class="step-indicator" :class="index + 1 <= props.current ? 'step-indicator-active' : ''">
         <div class="step-indicator-slot">
           <div class="slot-icon" v-if="index + 1 === props.current && props.status === 'error'">
@@ -26,25 +26,27 @@
 <script setup lang="ts">
 import { Close as CloseIcon, Check as CheckIcon } from "@icon-park/vue-next";
 
+// 定义组件的 props
 const props = withDefaults(defineProps<{
-  current: number,
-  status?: string,
-  data: string[]
+  current: number,    // 当前步骤
+  status?: string,    // 当前步骤状态：'process', 'finish', 'error'
+  data: string[]      // 步骤数据
 }>(), {
-  status: "process",
+  status: "process",  // 默认状态为'process'
 })
-
 </script>
 
 <style lang="scss" scoped>
 .alnitak-steps {
   width: 100%;
   display: flex;
+  justify-content: space-between;
 
   .alnitak-step {
     position: relative;
     display: flex;
     flex: 1;
+    text-align: center;  // 居中对齐
 
     .step-indicator {
       height: 28px;
@@ -98,6 +100,7 @@ const props = withDefaults(defineProps<{
 
     .step-content {
       flex: 1;
+      margin-left: 12px;
 
       .step-content-header {
         position: relative;
