@@ -1,20 +1,20 @@
 <template>
   <div class="header-bar">
     <div class="sidebar-title">
-      <el-icon class="menu-icon-btn" size="22" @click="foldClick">
+      <el-icon class="menu-icon-btn" size="22" @click="foldClick" aria-label="切换菜单">
         <hamburger-button></hamburger-button>
       </el-icon>
       <nuxt-link class="title" to="/">{{ globalConfig.title }}</nuxt-link>
     </div>
     <div class="header-search">
       <div class="search-input">
-        <input class="input" v-model="keywords" @keydown.enter="handelSearch">
-        <button class="btn" @click="handelSearch">
+        <input class="input" v-model="keywords" @keydown.enter="handleSearch" placeholder="搜索..." />
+        <button class="btn" @click="handleSearch" :disabled="searchLoading" aria-label="搜索">
           <search-icon class="icon" size="16" />
         </button>
       </div>
     </div>
-    <div v-if="!loading" class="header-right">
+    <div v-if="!userLoading" class="header-right">
       <!-- 用户头像 -->
       <div v-if="isLoggedIn" class="avatar-box">
         <nuxt-link to="/space">
@@ -37,7 +37,7 @@
               </div>
               <right-icon class="right-icon"></right-icon>
             </nuxt-link>
-            <div class="menu-item disabled-select" @click="logout">
+            <div class="menu-item disabled-select" @click="logout" :disabled="logoutLoading">
               <div class="link-title">
                 <logout-icon class="icon"></logout-icon>
                 <span>退出登录</span>
@@ -51,23 +51,23 @@
         <div class="login-btn" @click="showLogin = true">登录</div>
       </div>
       <!-- 图形按钮 -->
-      <nuxt-link class="icon-btn" to="/message/announce">
+      <nuxt-link class="icon-btn" to="/message/announce" aria-label="消息">
         <message-icon class="icon"></message-icon>
         <div class="icon-text">消息</div>
       </nuxt-link>
-      <nuxt-link class="icon-btn" to="/space/history">
+      <nuxt-link class="icon-btn" to="/space/history" aria-label="历史">
         <history-icon class="icon"></history-icon>
         <div class="icon-text">历史</div>
       </nuxt-link>
       <!-- 投稿按钮 -->
-      <nuxt-link class="upload-btn disabled-select" to="/upload/video">
+      <nuxt-link class="upload-btn disabled-select" to="/upload/video" aria-label="投稿">
         <upload-icon class="upload-icon"></upload-icon>
         <span>投稿</span>
       </nuxt-link>
     </div>
     <div v-else class="header-right"></div>
     <client-only>
-      <login-dialog v-if="showLogin" @close="loginClose" @success="loginSuccess"></login-dialog>
+      <login-dialog v-show="showLogin" @close="loginClose" @success="loginSuccess"></login-dialog>
     </client-only>
   </div>
 </template>
@@ -85,21 +85,25 @@ import {
 
 const emits = defineEmits(["changeFold"]);
 
-const loading = ref(true);
+const userLoading = ref(true);
 const isLoggedIn = ref(false);
 const showLogin = ref(false);
-const userInfo = ref<UserInfoType>()
+const userInfo = ref<UserInfoType>();
+const searchLoading = ref(false);
+const logoutLoading = ref(false);
+const keywords = ref("");
+
+// 获取用户信息
 const getUserInfo = async () => {
   const res = await getUserInfoAPI();
   if (res.data.code === statusCode.OK) {
     userInfo.value = res.data.data.userInfo;
     isLoggedIn.value = true;
   }
-
-  loading.value = false;
+  userLoading.value = false;
 }
 
-// 左侧菜单
+// 左侧菜单折叠
 const menuFold = ref(false);
 const foldClick = () => {
   menuFold.value = !menuFold.value;
@@ -108,24 +112,32 @@ const foldClick = () => {
 
 // 退出登录
 const logout = async () => {
-  await logoutAPI(storageData.get('refreshToken'));
-
-  storageData.remove("token");
-  storageData.remove('refreshToken');
-  isLoggedIn.value = false;
+  logoutLoading.value = true;
+  try {
+    await logoutAPI(storageData.get('refreshToken'));
+    storageData.remove("token");
+    storageData.remove('refreshToken');
+    isLoggedIn.value = false;
+  } finally {
+    logoutLoading.value = false;
+  }
 }
 
-//搜索功能
-const keywords = ref("");
-const handelSearch = () => {
+// 搜索功能
+const handleSearch = async () => {
   if (!keywords.value) {
     ElMessage.warning("请先输入搜索内容");
     return;
   }
 
-  navigateTo(`/search/${keywords.value}`, {
-    open: { target: '_blank' }
-  })
+  searchLoading.value = true;
+  try {
+    navigateTo(`/search/${keywords.value}`, {
+      open: { target: '_blank' }
+    });
+  } finally {
+    searchLoading.value = false;
+  }
 }
 
 const loginClose = () => {
@@ -147,10 +159,8 @@ onBeforeMount(() => {
 .header-bar {
   display: flex;
   align-items: center;
-  width: 54;
+  width: 100%;
   height: 60px;
-  display: flex;
-  align-items: center;
   box-shadow: inset 0 -1px #f1f2f3;
 
   .sidebar-title {
@@ -165,10 +175,6 @@ onBeforeMount(() => {
       border-radius: 50%;
       cursor: pointer;
 
-      span {
-        height: 22px;
-      }
-
       &:hover {
         background-color: rgba(0, 0, 0, .1);
       }
@@ -180,7 +186,6 @@ onBeforeMount(() => {
       white-space: nowrap;
     }
   }
-
 
   .header-search {
     flex: 1;
@@ -196,12 +201,9 @@ onBeforeMount(() => {
         padding: 8px 30px 8px 11px;
         height: 36px;
         font-size: 12px;
-        line-height: 14px;
         border-radius: 18px;
-        width: 500px;
-        vertical-align: top;
+        width: 100%;
         color: var(--font-primary-1);
-        box-sizing: border-box;
       }
 
       .btn {
@@ -211,18 +213,13 @@ onBeforeMount(() => {
         border: none;
         width: 20px;
         height: 36px;
-        line-height: 36px;
         font-size: 14px;
-        vertical-align: top;
         background: transparent;
-        padding: 0;
         cursor: pointer;
 
         .icon {
           display: block;
-          margin-top: 3px;
           width: 20px;
-          height: 36px;
           color: var(--font-primary-5);
         }
       }
@@ -248,10 +245,10 @@ onBeforeMount(() => {
       font-size: 14px;
       font-weight: 500;
       background-color: var(--primary-hover-color);
+      cursor: pointer;
     }
 
     .upload-btn {
-      color: var(--primary-text-color);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -260,10 +257,8 @@ onBeforeMount(() => {
       width: 100px;
       height: 36px;
       border-radius: 5px;
-      text-align: center;
       cursor: pointer;
       text-decoration: none;
-      transition: background-color .3s;
 
       .upload-icon {
         width: 16px;
@@ -281,12 +276,9 @@ onBeforeMount(() => {
 .avatar-box {
   position: relative;
   cursor: pointer;
-  margin: 0 10px;
 
-  &:hover {
-    .menu-container {
-      display: block;
-    }
+  &:hover .menu-container {
+    display: block;
   }
 
   .menu-container {
@@ -296,119 +288,32 @@ onBeforeMount(() => {
     top: 40px;
     left: -110px;
     z-index: 999;
-
-    .transition {
-      height: 10px;
-    }
+    transition: opacity 0.3s ease;
 
     .header-menu {
-      box-sizing: border-box;
-      padding: 12px 12px 6px;
+      padding: 12px;
       background-color: #fff;
       border-radius: 10px;
-      animation: menu .3s ease-in;
       box-shadow: 0 0 30px rgba(0, 0, 0, .1);
 
       .menu-info {
         display: flex;
+        flex-direction: column;
 
         .name-box {
-          width: calc(100% - 52px);
           padding-left: 12px;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-
           .name {
             font-size: 14px;
             color: var(--font-primary-2);
           }
-
           .sign {
             font-size: 12px;
-            color: var(--font-primary-3);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            color: var(--font-primary-4);
+            margin-top: 4px;
           }
-        }
-      }
-
-      .divider {
-        height: 1px;
-        width: 100%;
-        margin: 12px 0 6px;
-        background-color: #e5e5e5;
-      }
-
-      .menu-item {
-        width: 100%;
-        height: 36px;
-        color: var(--font-primary-2);
-        text-decoration: none;
-        box-sizing: border-box;
-        padding: 0 6px;
-        border-radius: 3px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-
-        .link-title {
-          display: flex;
-          align-items: center;
-
-          .icon {
-            width: 18px;
-            height: 18px;
-            margin-right: 10px;
-          }
-        }
-
-        .right-icon {
-          width: 18px;
-          height: 18px;
-        }
-
-        &:hover {
-          background-color: #e3e5e7;
         }
       }
     }
-  }
-}
-
-.icon-btn {
-  color: var(--font-primary-3);
-  position: relative;
-  width: 50px;
-  height: 50px;
-  display: flex;
-  align-items: center;
-  flex-direction: column;
-  justify-content: center;
-  text-decoration: none;
-
-  .icon {
-    width: 18px;
-    height: 18px;
-    margin-bottom: 2px;
-  }
-
-  .icon-text {
-    font-size: 12px;
-    line-height: 14px;
-  }
-}
-
-
-@keyframes menu {
-  0% {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-
-  100% {
-    opacity: 1;
   }
 }
 </style>
