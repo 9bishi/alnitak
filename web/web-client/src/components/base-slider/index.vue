@@ -2,14 +2,14 @@
   <div :class="vertical ? 'slider-vertical' : 'slider-line'">
     <div ref="sliderRef" class="slider-bar" @click="clickSlider($event)">
       <div class="slider-played" :style="vertical ? `height: ${activePercentage}%` : `width: ${activePercentage}%`">
-        <div ref="blockRef" class="slider-block"></div>
+        <div ref="blockRef" class="slider-block" tabindex="0"></div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { watch, onMounted, ref, nextTick, onBeforeUnmount, computed } from 'vue';
+import { watch, onMounted, ref, onBeforeUnmount } from 'vue';
 
 const emit = defineEmits(["changeValue"]);
 const props = withDefaults(defineProps<{
@@ -46,33 +46,38 @@ const clickSlider = (e: MouseEvent) => {
     percentage = Math.round(percentage * 10) / 10
   }
 
+  updateSlider(percentage);
+}
+
+// 更新滑块位置和值
+const updateSlider = (percentage: number) => {
+  percentage = Math.max(0, percentage);
+  percentage = Math.min(percentage, 1);
+
   activePercentage.value = percentage * 100;
   emit('changeValue', Math.round((props.max - props.min) * percentage * 100) / 100);
 }
 
 // 滑动滑动条
 const slidingSlider = () => {
-  // PC端
-  blockRef.value!.onmousedown = function () {
-    document.onmousemove = function (e) {
-      sliderValueChange(e);
-    };
-    document.onmouseup = function () {
-      document.onmousemove = document.onmouseup = null;
-    };
-  };
-  //移动端
-  blockRef.value!.ontouchstart = function () {
-    document.ontouchmove = function (e) {
-      sliderValueChange(e);
-    };
-    document.ontouchend = function () {
-      document.ontouchmove = document.ontouchend = null;
-    };
-  };
+  blockRef.value!.onmousedown = startSliding;
+  blockRef.value!.ontouchstart = startSliding;
+  blockRef.value!.onkeydown = handleKeydown;
 }
 
-//滑动条值改变
+// 开始滑动
+const startSliding = (e: Event) => {
+  e.preventDefault();
+  document.onmousemove = document.ontouchmove = throttle(sliderValueChange, 16);
+  document.onmouseup = document.ontouchend = stopSliding;
+}
+
+// 停止滑动
+const stopSliding = () => {
+  document.onmousemove = document.ontouchmove = document.onmouseup = document.ontouchend = null;
+}
+
+// 滑动条值改变
 const sliderValueChange = (e: MouseEvent | TouchEvent) => {
   let activeSize: number;
   let percentage: number;
@@ -94,15 +99,41 @@ const sliderValueChange = (e: MouseEvent | TouchEvent) => {
     percentage = Math.round((activeSize / sliderRef.value!.clientWidth) * 100) / 100;
   }
 
-  percentage = Math.max(0, percentage);
-  percentage = Math.min(percentage, 1);
-
   if (props.step) {
     percentage = Math.round(percentage * 10) / 10
   }
 
-  activePercentage.value = percentage * 100;
-  emit('changeValue', Math.round((props.max - props.min) * percentage * 100) / 100);
+  updateSlider(percentage);
+}
+
+// 处理键盘事件
+const handleKeydown = (e: KeyboardEvent) => {
+  let step = props.step ? 0.1 : 0.01;
+  if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
+    updateSlider(Math.min(activePercentage.value / 100 + step, 1));
+  } else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
+    updateSlider(Math.max(activePercentage.value / 100 - step, 0));
+  }
+}
+
+// 节流函数
+const throttle = (func: Function, limit: number) => {
+  let lastFunc: NodeJS.Timeout;
+  let lastRan: number;
+  return function (...args: any) {
+    if (!lastRan) {
+      func(...args);
+      lastRan = Date.now();
+    } else {
+      clearTimeout(lastFunc);
+      lastFunc = setTimeout(function () {
+        if ((Date.now() - lastRan) >= limit) {
+          func(...args);
+          lastRan = Date.now();
+        }
+      }, limit - (Date.now() - lastRan));
+    }
+  }
 }
 
 watch(() => props.value, (newValue) => {
@@ -115,10 +146,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  //清除touch事件
-  document.ontouchmove = document.ontouchend = null;
-  //清除mouse事件
-  document.onmousemove = document.onmouseup = null;
+  stopSliding();
 })
 </script>
 
@@ -154,7 +182,6 @@ onBeforeUnmount(() => {
     }
   }
 }
-
 
 .slider-vertical {
   height: calc(100% - 24px);
