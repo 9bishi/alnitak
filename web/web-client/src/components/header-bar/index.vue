@@ -5,8 +5,8 @@
     </nuxt-link>
     <div v-show="isSearchPage" class="header-center">
       <div class="search-form">
-        <input class="input" v-model="keywords" @keydown.enter="handelSearch">
-        <button class="btn" @click="handelSearch">
+        <input class="input" v-model="keywords" @keydown.enter="handleSearch">
+        <button class="btn" @click="handleSearch">
           <search-icon class="icon" size="16" />
         </button>
       </div>
@@ -65,6 +65,11 @@
         <upload-icon class="upload-icon"></upload-icon>
         <span>投稿</span>
       </nuxt-link>
+      <!-- 主题切换按钮 -->
+      <button class="theme-toggle-btn" @click="toggleTheme">
+        <theme-icon :class="isDarkTheme ? 'dark' : 'light'" size="16" />
+        <span>{{ isDarkTheme ? '深色模式' : '浅色模式' }}</span>
+      </button>
     </div>
     <div v-else class="header-right"></div>
   </div>
@@ -76,18 +81,18 @@ import {
   Search as SearchIcon, Message as MessageIcon,
   Upload as UploadIcon, History as HistoryIcon,
   User as UserIcon, Logout as LogoutIcon,
-  Right as RightIcon, FolderFocusOne as CollectIcon
+  Right as RightIcon, FolderFocusOne as CollectIcon,
+  Theme as ThemeIcon
 } from '@icon-park/vue-next';
 import { logoutAPI } from '@/api/auth';
 import { getUserInfoAPI } from '@/api/user';
 import CommonAvatar from '@/components/common-avatar/index.vue';
 
-
 const route = useRoute();
 const isSearchPage = ref(route.name !== 'search-keywords');
 
 const keywords = ref('');
-const handelSearch = () => {
+const handleSearch = () => {
   if (!keywords.value) {
     ElMessage.warning("请先输入搜索内容");
     return;
@@ -100,23 +105,28 @@ const handelSearch = () => {
 
 const loading = ref(true);
 const isLoggedIn = ref(false);
-const userInfo = ref<UserInfoType>()
+const userInfo = ref<UserInfoType>();
+const isDarkTheme = ref(false);
+
 const getUserInfo = async () => {
   const res = await getUserInfoAPI();
   if (res.data.code === statusCode.OK) {
     userInfo.value = res.data.data.userInfo;
     isLoggedIn.value = true;
   }
-
   loading.value = false;
 }
 
 const logout = async () => {
   await logoutAPI(storageData.get('refreshToken'));
-
   storageData.remove("token");
   storageData.remove('refreshToken');
   isLoggedIn.value = false;
+}
+
+const toggleTheme = () => {
+  isDarkTheme.value = !isDarkTheme.value;
+  document.body.classList.toggle('dark-theme', isDarkTheme.value);
 }
 
 onBeforeMount(() => {
@@ -240,6 +250,32 @@ onBeforeMount(() => {
       transition: background-color .3s;
 
       .upload-icon {
+        width: 16px;
+        height: 16px;
+        margin-right: 5px;
+      }
+
+      &:hover {
+        background-color: var(--primary-hover-color);
+      }
+    }
+
+    .theme-toggle-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: var(--primary-color);
+      margin-left: 10px;
+      width: 100px;
+      height: 36px;
+      border-radius: 5px;
+      text-align: center;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background-color .3s;
+      color: var(--primary-text-color);
+
+      .theme-icon {
         width: 16px;
         height: 16px;
         margin-right: 5px;
