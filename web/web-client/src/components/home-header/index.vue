@@ -8,8 +8,8 @@
     </div>
     <div class="header-search">
       <div class="search-input">
-        <input class="input" v-model="keywords" @keydown.enter="handelSearch">
-        <button class="btn" @click="handelSearch">
+        <input class="input" v-model="keywords" @keydown.enter="handleSearch">
+        <button class="btn" @click="handleSearch">
           <search-icon class="icon" size="16" />
         </button>
       </div>
@@ -64,6 +64,11 @@
         <upload-icon class="upload-icon"></upload-icon>
         <span>投稿</span>
       </nuxt-link>
+      <!-- 主题切换按钮 -->
+      <button class="theme-toggle-btn" @click="toggleTheme">
+        <theme-icon :class="isDarkTheme ? 'dark' : 'light'" size="16" />
+        <span>{{ isDarkTheme ? '深色模式' : '浅色模式' }}</span>
+      </button>
     </div>
     <div v-else class="header-right"></div>
     <client-only>
@@ -80,7 +85,8 @@ import LoginDialog from "@/components/login-dialog/index.vue";
 import {
   HamburgerButton, Upload as UploadIcon, Search as SearchIcon,
   Message as MessageIcon, History as HistoryIcon,
-  User as UserIcon, Logout as LogoutIcon, Right as RightIcon
+  User as UserIcon, Logout as LogoutIcon, Right as RightIcon,
+  Theme as ThemeIcon
 } from '@icon-park/vue-next';
 
 const emits = defineEmits(["changeFold"]);
@@ -88,14 +94,15 @@ const emits = defineEmits(["changeFold"]);
 const loading = ref(true);
 const isLoggedIn = ref(false);
 const showLogin = ref(false);
-const userInfo = ref<UserInfoType>()
+const userInfo = ref<UserInfoType>();
+const isDarkTheme = ref(false);
+
 const getUserInfo = async () => {
   const res = await getUserInfoAPI();
   if (res.data.code === statusCode.OK) {
     userInfo.value = res.data.data.userInfo;
     isLoggedIn.value = true;
   }
-
   loading.value = false;
 }
 
@@ -109,20 +116,18 @@ const foldClick = () => {
 // 退出登录
 const logout = async () => {
   await logoutAPI(storageData.get('refreshToken'));
-
   storageData.remove("token");
   storageData.remove('refreshToken');
   isLoggedIn.value = false;
 }
 
-//搜索功能
+// 搜索功能
 const keywords = ref("");
-const handelSearch = () => {
+const handleSearch = () => {
   if (!keywords.value) {
     ElMessage.warning("请先输入搜索内容");
     return;
   }
-
   navigateTo(`/search/${keywords.value}`, {
     open: { target: '_blank' }
   })
@@ -138,6 +143,12 @@ const loginSuccess = () => {
   loginClose();
 }
 
+// 主题切换
+const toggleTheme = () => {
+  isDarkTheme.value = !isDarkTheme.value;
+  document.body.classList.toggle('dark-theme', isDarkTheme.value);
+}
+
 onBeforeMount(() => {
   getUserInfo();
 })
@@ -147,7 +158,7 @@ onBeforeMount(() => {
 .header-bar {
   display: flex;
   align-items: center;
-  width: 54;
+  width: 100%;
   height: 60px;
   display: flex;
   align-items: center;
@@ -180,7 +191,6 @@ onBeforeMount(() => {
       white-space: nowrap;
     }
   }
-
 
   .header-search {
     flex: 1;
@@ -266,6 +276,32 @@ onBeforeMount(() => {
       transition: background-color .3s;
 
       .upload-icon {
+        width: 16px;
+        height: 16px;
+        margin-right: 5px;
+      }
+
+      &:hover {
+        background-color: var(--primary-hover-color);
+      }
+    }
+
+    .theme-toggle-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: var(--primary-color);
+      margin-left: 10px;
+      width: 100px;
+      height: 36px;
+      border-radius: 5px;
+      text-align: center;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background-color .3s;
+      color: var(--primary-text-color);
+
+      .theme-icon {
         width: 16px;
         height: 16px;
         margin-right: 5px;
@@ -399,7 +435,6 @@ onBeforeMount(() => {
     line-height: 14px;
   }
 }
-
 
 @keyframes menu {
   0% {
